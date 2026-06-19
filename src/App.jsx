@@ -21,27 +21,20 @@ function App() {
   }, [analysis.workout])
 
   const handleDownload = () => {
-    if (!analysis.workout || analysis.errors.length > 0) {
-      return
-    }
+    if (!analysis.workout || analysis.errors.length > 0) return
 
-    setDownloadState('building')
-
-    try {
-      const bytes = buildWorkoutFit(analysis.workout)
-      const blob = new Blob([bytes], { type: 'application/octet-stream' })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `${analysis.workout.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'workout'}.fit`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      URL.revokeObjectURL(url)
-      setDownloadState('ready')
-    } catch (error) {
-      setDownloadState(error instanceof Error ? error.message : 'Failed to build FIT file')
-    }
+    ;(async () => {
+      setDownloadState('building')
+      try {
+        const bytes = buildWorkoutFit(analysis.workout)
+        const blob = new Blob([bytes], { type: 'application/octet-stream' })
+        const suggested = `${analysis.workout.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'workout'}.fit`
+        await saveFile(suggested, blob, 'application/octet-stream')
+        setDownloadState('ready')
+      } catch (error) {
+        setDownloadState(error instanceof Error ? error.message : 'Failed to build FIT file')
+      }
+    })()
   }
 
   const handleCorrectWarnings = () => {
@@ -50,6 +43,51 @@ function App() {
       setDraft(fixed)
     } catch (error) {
       console.error('Auto-fix failed', error)
+    }
+  }
+
+  // Unified save helper: prefers showSaveFilePicker, falls back to directory picker or download
+  async function saveFile(suggestedName, data, mimeType = 'application/octet-stream') {
+    // data may be a string, Blob, Uint8Array, or ArrayBuffer
+    try {
+      if ('showSaveFilePicker' in window) {
+        const handle = await window.showSaveFilePicker({
+          suggestedName,
+          types: [
+            {
+              description: mimeType.split('/')[1] || 'File',
+              accept: { [mimeType]: ['.' + suggestedName.split('.').pop()] },
+            },
+          ],
+        })
+
+        const writable = await handle.createWritable()
+        if (data instanceof Blob) {
+          await writable.write(data)
+        } else if (data instanceof Uint8Array || data instanceof ArrayBuffer) {
+          await writable.write(data)
+        } else {
+          await writable.write(String(data))
+        }
+
+        await writable.close()
+        return
+      }
+
+      // No directory picker fallback — prefer Save File Picker or browser download.
+
+      // Last fallback: trigger browser download
+      const blob = data instanceof Blob ? data : new Blob([data], { type: mimeType })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = suggestedName
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      throw err
     }
   }
 
@@ -90,77 +128,9 @@ function App() {
   }
 
   async function handleSaveJson() {
-    // Prefer File System Access API when available
     try {
       setDownloadState('saving')
-
-      if ('showDirectoryPicker' in window) {
-        let dirHandle = await getStoredDirHandle()
-
-        if (dirHandle) {
-          // ensure we still have write permission for the stored directory handle
-          if (typeof dirHandle.queryPermission === 'function') {
-            const perm = await dirHandle.queryPermission({ mode: 'readwrite' })
-            if (perm !== 'granted') {
-              const req = await dirHandle.requestPermission({ mode: 'readwrite' })
-              if (req !== 'granted') {
-                // fall back to asking the user to pick a directory again
-                dirHandle = await window.showDirectoryPicker()
-                try {
-                  await storeDirHandle(dirHandle)
-                } catch (e) {
-                  console.warn('Could not persist directory handle', e)
-                }
-              }
-            }
-          }
-        } else {
-          dirHandle = await window.showDirectoryPicker()
-          try {
-            await storeDirHandle(dirHandle)
-          } catch (e) {
-            console.warn('Could not persist directory handle', e)
-          }
-        }
-
-        // Prompt for filename so we don't overwrite the same name every time
-        const filename = window.prompt('Filename to save as', 'workout.json') || 'workout.json'
-        const fileHandle = await dirHandle.getFileHandle(filename, { create: true })
-        const writable = await fileHandle.createWritable()
-        await writable.write(draft)
-        await writable.close()
-        setDownloadState('saved')
-        return
-      }
-
-      // If directory picker isn't available, prefer the save file picker when present
-      if ('showSaveFilePicker' in window) {
-        const handle = await window.showSaveFilePicker({
-          suggestedName: 'workout.json',
-          types: [
-            {
-              description: 'JSON',
-              accept: { 'application/json': ['.json'] },
-            },
-          ],
-        })
-        const writable = await handle.createWritable()
-        await writable.write(draft)
-        await writable.close()
-        setDownloadState('saved')
-        return
-      }
-
-      // Fallback: trigger browser download
-      const blob = new Blob([draft], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = 'workout.json'
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      URL.revokeObjectURL(url)
+      await saveFile('workout.json', draft, 'application/json')
       setDownloadState('saved')
     } catch (error) {
       console.error('Save failed', error)
