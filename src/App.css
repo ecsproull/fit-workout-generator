@@ -2,6 +2,8 @@
   min-height: 100vh;
   padding: 32px;
   color: #f3f4f6;
+  display: flex;
+  flex-direction: column;
 }
 
 .hero-panel,
@@ -11,14 +13,14 @@
 }
 
 .hero-panel {
-  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr);
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
   align-items: start;
   margin-bottom: 24px;
 }
 
 .hero-copy h1 {
   margin: 12px 0 16px;
-  max-width: 12ch;
+  max-width: none;
 }
 
 .eyebrow {
@@ -30,7 +32,6 @@
 }
 
 .lede {
-  max-width: 68ch;
   color: #cbd5e1;
   font-size: 1.05rem;
   line-height: 1.7;
@@ -65,6 +66,12 @@
   padding: 24px;
 }
 
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .hero-card h2,
 .panel h2,
 .panel h3 {
@@ -90,6 +97,9 @@
 
 .workspace-grid {
   grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
 }
 
 .panel-header,
@@ -97,6 +107,10 @@
 .preview-grid {
   display: flex;
   gap: 16px;
+}
+
+.detail-panel {
+  overflow: auto;
 }
 
 .panel-header,
@@ -107,7 +121,8 @@
 
 .editor-panel textarea {
   width: 100%;
-  min-height: 560px;
+  min-height: 240px;
+  flex: 1;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 18px;
   margin: 18px 0 16px;

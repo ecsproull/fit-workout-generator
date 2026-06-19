@@ -528,6 +528,21 @@ export function parseWorkoutDraft(draft) {
   }
 }
 
+export function autoFixWarnings(draft) {
+  let parsed
+
+  try {
+    parsed = JSON.parse(draft)
+  } catch (error) {
+    throw new Error(error instanceof Error ? error.message : 'Invalid JSON')
+  }
+
+  const result = normalizeWorkoutDraft(parsed)
+
+  // Return a pretty-printed JSON string of the normalized draft so the UI can replace it.
+  return JSON.stringify(result.normalized, null, 2)
+}
+
 export function summarizeWorkout(workout) {
   const flatSteps = flattenSteps(workout.steps)
   const estimatedDistance = sumDistance(workout.steps, { expandRepeats: true })
