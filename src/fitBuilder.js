@@ -393,6 +393,41 @@ function normalizeWorkoutDraft(parsedDraft) {
   return { normalized, warnings }
 }
 
+// Migrate older/legacy shapes to the current schema
+function migrateLegacyShapes(obj) {
+  if (Array.isArray(obj)) return obj.map(migrateLegacyShapes)
+  if (!obj || typeof obj !== 'object') return obj
+
+  const out = {}
+  for (const [key, value] of Object.entries(obj)) {
+    let k = key
+    let v = value
+
+    if (k === 'type' && !('kind' in obj)) {
+      k = 'kind'
+    }
+
+    if (k === 'repeat' && !('times' in obj)) {
+      // convert { repeat: N } -> { times: N }
+      out['times'] = v
+      continue
+    }
+
+    // recurse into nested objects/arrays
+    out[k] = migrateLegacyShapes(v)
+  }
+
+  // Some legacy steps used a top-level `distance` number instead of a `duration` object
+  if (!('duration' in out) && 'distance' in obj) {
+    const val = obj.distance
+    if (typeof val === 'number' || (typeof val === 'string' && isNumericString(val))) {
+      out.duration = { kind: 'distance', value: Number(val) }
+    }
+  }
+
+  return out
+}
+
 function formatZodIssues(error) {
   const issues = []
 
@@ -509,6 +544,9 @@ export function parseWorkoutDraft(draft) {
       warnings: [],
     }
   }
+
+  // Accept and migrate some legacy shapes (e.g., `type` -> `kind`, `distance` -> `duration`)
+  parsed = migrateLegacyShapes(parsed)
 
   const normalized = normalizeWorkoutDraft(parsed)
   const result = workoutSchema.safeParse(normalized.normalized)

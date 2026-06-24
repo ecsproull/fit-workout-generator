@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
 import {
   buildWorkoutFit,
   defaultWorkoutJson,
@@ -15,6 +15,11 @@ function App() {
   const idbKey = 'fitbuilder-handles'
 
   const analysis = useMemo(() => parseWorkoutDraft(draft), [draft])
+  useEffect(() => {
+    // Log parse results for debugging when the draft changes
+    // eslint-disable-next-line no-console
+    console.debug('parseWorkoutDraft ->', analysis)
+  }, [analysis])
   const summary = useMemo(() => {
     if (!analysis.workout) return null
     return summarizeWorkout(analysis.workout)
@@ -43,6 +48,51 @@ function App() {
       setDraft(fixed)
     } catch (error) {
       console.error('Auto-fix failed', error)
+    }
+  }
+
+  async function handleOpenJson() {
+    try {
+      if ('showOpenFilePicker' in window) {
+        const [handle] = await window.showOpenFilePicker({
+          multiple: false,
+          types: [
+            {
+              description: 'JSON',
+              accept: { 'application/json': ['.json'] },
+            },
+          ],
+        })
+
+        const file = await handle.getFile()
+        const text = await file.text()
+        setDraft(text)
+        setDownloadState('loaded')
+        return
+      }
+
+      // Fallback for browsers without the File System Access API
+      await new Promise((resolve, reject) => {
+        const input = document.createElement('input')
+        input.type = 'file'
+        input.accept = '.json,application/json'
+        input.onchange = async () => {
+          const f = input.files && input.files[0]
+          if (!f) return reject(new Error('No file selected'))
+          try {
+            const txt = await f.text()
+            setDraft(txt)
+            setDownloadState('loaded')
+            resolve()
+          } catch (err) {
+            reject(err)
+          }
+        }
+        input.click()
+      })
+    } catch (err) {
+      console.error('Open failed', err)
+      setDownloadState(err instanceof Error ? err.message : 'Open failed')
     }
   }
 
@@ -192,6 +242,9 @@ function App() {
           <div className="actions">
             <button type="button" className="primary-button" onClick={handleDownload} disabled={analysis.errors.length > 0}>
               Download FIT
+            </button>
+            <button type="button" className="ghost-button" onClick={handleOpenJson}>
+              Open JSON
             </button>
             <button type="button" className="ghost-button" onClick={handleCorrectWarnings} disabled={analysis.warnings.length === 0}>
               Correct Warnings
