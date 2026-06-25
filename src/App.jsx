@@ -271,6 +271,18 @@ function App() {
                     {summary.poolLength} {summary.poolLengthUnit}
                   </strong>
                 </div>
+                {analysis.workout && analysis.workout.notes && (
+                  <div>
+                    <span className="label">Notes / Description</span>
+                    <strong>{analysis.workout.notes}</strong>
+                  </div>
+                )}
+                {analysis.workout && analysis.workout.equipment && (
+                  <div>
+                    <span className="label">Equipment</span>
+                    <strong>{analysis.workout.equipment}</strong>
+                  </div>
+                )}
                 <div>
                   <span className="label">Steps</span>
                   <strong>{summary.stepCount}</strong>

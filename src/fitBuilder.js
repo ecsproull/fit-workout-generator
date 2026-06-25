@@ -25,6 +25,8 @@ const durationSchema = z
 
 const zoneValueSchema = z.union([z.number().int().min(1).max(5), z.enum(['X', 'Y'])])
 
+const workoutEquipmentValues = ['none', 'swimFins', 'swimKickboard', 'swimPaddles', 'swimPullBuoy', 'swimSnorkel']
+
 const paceTargetSchema = z
   .object({
     kind: z.literal('pace'),
@@ -79,7 +81,10 @@ const workoutSchema = z
     subSport: z.literal('lapSwimming'),
     poolLength: z.number().finite().positive(),
     poolLengthUnit: z.enum(['meters', 'yards']),
+    // Top-level notes (mapped to FIT wktDescription). Accepts user-provided notes.
     notes: z.string().trim().optional(),
+    // Optional equipment hint (mapped to FIT workout.equipment). Valid values per FIT definition.
+    equipment: z.enum(workoutEquipmentValues).optional(),
     steps: z.array(stepSchema).min(1).max(40),
   })
   .strict()
@@ -91,6 +96,7 @@ export const defaultWorkoutJson = `{
   "poolLength": 25,
   "poolLengthUnit": "meters",
   "notes": "Simple pool workout for USB export.",
+  "equipment": "none",
   "steps": [
     {
       "kind": "swim",
@@ -130,7 +136,8 @@ export const defaultWorkoutJson = `{
 }`
 
 function mapPoolLengthUnit(unit) {
-  return unit === 'yards' ? 'statute' : 'metric'
+  // FIT displayMeasure: 0 = metric, 1 = statute (yards). Use numeric codes.
+  return unit === 'yards' ? 1 : 0
 }
 
 function humanizeStep(step, index) {
@@ -411,6 +418,12 @@ function migrateLegacyShapes(obj) {
       continue
     }
 
+    // Accept top-level `description` as an alias for `notes` in legacy/alternate drafts
+    if (k === 'description' && !('notes' in obj)) {
+      out['notes'] = migrateLegacyShapes(v)
+      continue
+    }
+
     // recurse into nested objects/arrays
     out[k] = migrateLegacyShapes(v)
   }
@@ -602,6 +615,18 @@ export function buildWorkoutFit(workout) {
   const fitPoolUnit = mapPoolLengthUnit(workout.poolLengthUnit)
   const flatSteps = flattenSteps(workout.steps)
 
+  // FIT distance fields are encoded in 1/100 meters. If the workout is authored in yards,
+  // convert distances to meters so the FIT file contains metric values and the device
+  // displays the correct yard/meter equivalent based on the poolLengthUnit flag.
+  const distanceScale = workout.poolLengthUnit === 'yards' ? 0.9144 : 1
+  const encodedPoolLength = workout.poolLength
+
+  // Debug: log encoding choices to help diagnose unit issues on-device
+  // eslint-disable-next-line no-console
+  console.debug('buildWorkoutFit: poolLength (input)', workout.poolLength, 'unit', workout.poolLengthUnit)
+  // eslint-disable-next-line no-console
+  console.debug('buildWorkoutFit: distanceScale', distanceScale, 'encodedPoolLength', encodedPoolLength, 'fitPoolUnit', fitPoolUnit)
+
   encoder.writeMesg({
     mesgNum: Profile.MesgNum.FILE_ID,
     type: fileType,
@@ -618,24 +643,24 @@ export function buildWorkoutFit(workout) {
     timeCreated: createdAt,
   })
 
-  encoder.writeMesg({
-    mesgNum: Profile.MesgNum.WORKOUT,
-    sport: workout.sport,
-    subSport: workout.subSport,
-    numValidSteps: flatSteps.length,
-    wktName: workout.name,
-    poolLength: workout.poolLength,
-    poolLengthUnit: fitPoolUnit,
-    wktDescription: workout.notes ?? '',
-  })
-
+encoder.writeMesg({
+  mesgNum: Profile.MesgNum.WORKOUT,
+  sport: workout.sport,
+  subSport: workout.subSport,
+  numValidSteps: flatSteps.length,
+  wktName: workout.name,
+  poolLength: encodedPoolLength,
+  poolLengthUnit: fitPoolUnit,
+  wktDescription: workout.notes ?? '',
+  equipment: workout.equipment ?? 'none',
+})
   encoder.writeMesg({
     mesgNum: Profile.MesgNum.WORKOUT_SESSION,
     sport: workout.sport,
     subSport: workout.subSport,
     numValidSteps: flatSteps.length,
     firstStepIndex: 0,
-    poolLength: workout.poolLength,
+    poolLength: encodedPoolLength,
     poolLengthUnit: fitPoolUnit,
   })
 
@@ -644,8 +669,11 @@ export function buildWorkoutFit(workout) {
     const isDistance = step.duration.kind === 'distance'
     const durationType = isDistance ? 'distance' : 'time'
     const durationValue = isDistance
-      ? Math.round(step.duration.value * 100)
+      ? Math.round(step.duration.value * distanceScale * 100)
       : Math.round(step.duration.value * 1000)
+
+    // eslint-disable-next-line no-console
+    if (isDistance) console.debug('buildWorkoutFit: step', index, 'duration (input)', step.duration.value, 'encoded', durationValue)
 
     const targetValue = step.kind === 'swim' ? strokeToFitValue[step.stroke] ?? 0 : 0
 
