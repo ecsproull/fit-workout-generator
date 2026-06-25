@@ -135,14 +135,24 @@ function mapPoolLengthUnit(unit) {
 
 function humanizeStep(step, index) {
   if (step.label) {
-    return step.label
+    // append any runtime target/zone info to the label
+    const extras = []
+    if (step.target && step.target.kind === 'pace' && typeof step.target.value === 'string') extras.push(`pace ${step.target.value}`)
+    if (step.zone !== undefined && step.zone !== null) extras.push(`zone ${step.zone}`)
+
+    return extras.length > 0 ? `${step.label} (${extras.join(', ')})` : step.label
   }
 
   if (step.kind === 'repeat') {
     return `Repeat ${index + 1}`
   }
 
-  return `${step.kind === 'rest' ? 'Rest' : 'Swim'} ${index + 1}`
+  const base = `${step.kind === 'rest' ? 'Rest' : 'Swim'} ${index + 1}`
+  const extras = []
+  if (step.target && step.target.kind === 'pace' && typeof step.target.value === 'string') extras.push(`pace ${step.target.value}`)
+  if (step.zone !== undefined && step.zone !== null) extras.push(`zone ${step.zone}`)
+
+  return extras.length > 0 ? `${base} (${extras.join(', ')})` : base
 }
 
 function flattenSteps(steps, output = []) {
@@ -218,19 +228,7 @@ function collectSemanticIssues(workout) {
         }
       }
 
-      if (step.kind === 'swim' && step.target) {
-        warnings.push({
-          path: [...nextPath, 'target'],
-          message: 'Swim pace target is accepted for planning, but not yet encoded into FIT step targets.',
-        })
-      }
-
-      if (step.kind === 'swim' && typeof step.zone === 'number') {
-        warnings.push({
-          path: [...nextPath, 'zone'],
-          message: 'Zone is accepted for planning, but not yet encoded into FIT step targets.',
-        })
-      }
+      // Target and zone are recorded in the step name so they are visible on-device.
     })
   }
 
