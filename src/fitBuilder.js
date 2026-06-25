@@ -613,19 +613,89 @@ export function buildWorkoutFit(workout) {
   const createdAt = new Date()
   const fileType = 'workout'
   const fitPoolUnit = mapPoolLengthUnit(workout.poolLengthUnit)
-  const flatSteps = flattenSteps(workout.steps)
-
-  // FIT distance fields are encoded in 1/100 meters. If the workout is authored in yards,
-  // convert distances to meters so the FIT file contains metric values and the device
-  // displays the correct yard/meter equivalent based on the poolLengthUnit flag.
   const distanceScale = workout.poolLengthUnit === 'yards' ? 0.9144 : 1
   const encodedPoolLength = workout.poolLength
 
-  // Debug: log encoding choices to help diagnose unit issues on-device
-  // eslint-disable-next-line no-console
-  console.debug('buildWorkoutFit: poolLength (input)', workout.poolLength, 'unit', workout.poolLengthUnit)
-  // eslint-disable-next-line no-console
-  console.debug('buildWorkoutFit: distanceScale', distanceScale, 'encodedPoolLength', encodedPoolLength, 'fitPoolUnit', fitPoolUnit)
+  let messageIndex = 0
+
+  function countFitSteps(steps) {
+    let count = 0
+
+    steps.forEach((step) => {
+      if (step.kind === 'repeat') {
+        count += countFitSteps(step.steps)
+        count += 1 // repeat marker step
+      } else {
+        count += 1
+      }
+    })
+
+    return count
+  }
+
+  const numValidSteps = countFitSteps(workout.steps)
+
+  function writeNormalStep(step) {
+    const index = messageIndex
+    messageIndex += 1
+
+    const isRest = step.kind === 'rest'
+    const isDistance = step.duration.kind === 'distance'
+    const durationType = isDistance ? 'distance' : 'time'
+    const durationValue = isDistance
+      ? Math.round(step.duration.value * distanceScale * 100)
+      : Math.round(step.duration.value * 1000)
+
+    const targetValue = step.kind === 'swim' ? strokeToFitValue[step.stroke] ?? 0 : 0
+
+    encoder.writeMesg({
+      mesgNum: Profile.MesgNum.WORKOUT_STEP,
+      messageIndex: index,
+      wktStepName: humanizeStep(step, index),
+      durationType,
+      durationValue,
+      intensity: isRest ? 'rest' : step.intensity,
+      targetType: isRest ? 'open' : 'swimStroke',
+      targetValue,
+      secondaryTargetType: isRest ? 'open' : 'swimStroke',
+      secondaryTargetValue: targetValue,
+    })
+  }
+
+  function writeRepeatStep(repeatStep, firstRepeatedStepIndex) {
+    const index = messageIndex
+    messageIndex += 1
+
+    console.log({
+        messageIndex: index,
+        durationType: "repeatUntilStepsCmplt",
+        durationStep: firstRepeatedStepIndex,
+        repeatSteps: repeatStep.times,
+    })
+
+    encoder.writeMesg({
+        mesgNum: Profile.MesgNum.WORKOUT_STEP,
+        messageIndex: index,
+        durationType: "repeatUntilStepsCmplt",
+        durationValue: firstRepeatedStepIndex,
+        targetValue: repeatStep.times
+    })
+  }
+
+  function writeSteps(steps) {
+    steps.forEach((step) => {
+      if (step.kind === 'repeat') {
+        const firstRepeatedStepIndex = messageIndex
+
+        writeSteps(step.steps)
+        writeRepeatStep(step, firstRepeatedStepIndex)
+
+        return
+      }
+
+      writeNormalStep(step)
+    })
+  }
 
   encoder.writeMesg({
     mesgNum: Profile.MesgNum.FILE_ID,
@@ -643,51 +713,29 @@ export function buildWorkoutFit(workout) {
     timeCreated: createdAt,
   })
 
-encoder.writeMesg({
-  mesgNum: Profile.MesgNum.WORKOUT,
-  sport: workout.sport,
-  subSport: workout.subSport,
-  numValidSteps: flatSteps.length,
-  wktName: workout.name,
-  poolLength: encodedPoolLength,
-  poolLengthUnit: fitPoolUnit,
-  wktDescription: workout.notes ?? '',
-  equipment: workout.equipment ?? 'none',
-})
+  encoder.writeMesg({
+    mesgNum: Profile.MesgNum.WORKOUT,
+    sport: workout.sport,
+    subSport: workout.subSport,
+    numValidSteps,
+    wktName: workout.name,
+    poolLength: encodedPoolLength,
+    poolLengthUnit: fitPoolUnit,
+    wktDescription: workout.notes ?? '',
+    equipment: workout.equipment ?? 'none',
+  })
+
   encoder.writeMesg({
     mesgNum: Profile.MesgNum.WORKOUT_SESSION,
     sport: workout.sport,
     subSport: workout.subSport,
-    numValidSteps: flatSteps.length,
+    numValidSteps,
     firstStepIndex: 0,
     poolLength: encodedPoolLength,
     poolLengthUnit: fitPoolUnit,
   })
 
-  flatSteps.forEach((step, index) => {
-    const isRest = step.kind === 'rest'
-    const isDistance = step.duration.kind === 'distance'
-    const durationType = isDistance ? 'distance' : 'time'
-    const durationValue = isDistance
-      ? Math.round(step.duration.value * distanceScale * 100)
-      : Math.round(step.duration.value * 1000)
-
-    // eslint-disable-next-line no-console
-    if (isDistance) console.debug('buildWorkoutFit: step', index, 'duration (input)', step.duration.value, 'encoded', durationValue)
-
-    const targetValue = step.kind === 'swim' ? strokeToFitValue[step.stroke] ?? 0 : 0
-
-    encoder.writeMesg({
-      mesgNum: Profile.MesgNum.WORKOUT_STEP,
-      messageIndex: index,
-      wktStepName: humanizeStep(step, index),
-      durationType,
-      durationValue,
-      intensity: isRest ? 'rest' : step.intensity,
-      targetType: isRest ? 'open' : 'swimStroke',
-      targetValue,
-    })
-  })
+  writeSteps(workout.steps)
 
   return encoder.close()
 }
