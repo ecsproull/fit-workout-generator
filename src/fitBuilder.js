@@ -40,6 +40,7 @@ const swimStepSchema = z
   .object({
     kind: z.literal('swim'),
     label: z.string().trim().min(1).optional(),
+    notes: z.string().trim().min(1).optional(),
     duration: durationSchema,
     stroke: z.enum(swimStrokeValues).default('freestyle'),
     intensity: z.enum(intensityValues).default('active'),
@@ -52,12 +53,25 @@ const restStepSchema = z
   .object({
     kind: z.literal('rest'),
     label: z.string().trim().min(1).optional(),
-    duration: z
-      .object({
-        kind: z.literal('time'),
-        value: z.number().finite().positive(),
-      })
-      .strict(),
+    notes: z.string().trim().min(1).optional(),
+    duration: z.discriminatedUnion('kind', [
+      z
+        .object({
+          kind: z.literal('time'),
+          value: z.number().finite().positive(),
+        })
+        .strict(),
+      z
+        .object({
+          kind: z.literal('lapButton'),
+        })
+        .strict(),
+      z
+        .object({
+          kind: z.literal('open'),
+        })
+        .strict(),
+    ]),
     intensity: z.enum(intensityValues).default('rest'),
   })
   .strict()
@@ -68,6 +82,7 @@ const repeatStepSchema = z
   .object({
     kind: z.literal('repeat'),
     label: z.string().trim().min(1).optional(),
+    notes: z.string().trim().min(1).optional(),
     times: z.number().int().min(2),
     steps: z.array(stepSchema).min(1),
   })
@@ -349,7 +364,7 @@ function normalizeStep(step, path, warnings) {
     return
   }
 
-  if (step.duration && typeof step.duration === 'object') {
+  if (step.duration && typeof step.duration === 'object' && Object.prototype.hasOwnProperty.call(step.duration, 'value')) {
     step.duration.value = coerceNumberLike(
       step.duration.value,
       [...path, 'duration', 'value'],
@@ -613,7 +628,8 @@ export function buildWorkoutFit(workout) {
   const createdAt = new Date()
   const fileType = 'workout'
   const fitPoolUnit = mapPoolLengthUnit(workout.poolLengthUnit)
-  const distanceScale = workout.poolLengthUnit === 'yards' ? 0.9144 : 1
+  // Keep workout distances in authored units; converting yards caused 50y to display as 47y on device.
+  const distanceScale = 1
   const encodedPoolLength = workout.poolLength
 
   let messageIndex = 0
@@ -641,10 +657,19 @@ export function buildWorkoutFit(workout) {
 
     const isRest = step.kind === 'rest'
     const isDistance = step.duration.kind === 'distance'
-    const durationType = isDistance ? 'distance' : 'time'
-    const durationValue = isDistance
-      ? Math.round(step.duration.value * distanceScale * 100)
-      : Math.round(step.duration.value * 1000)
+    const isOpenRest = isRest && (step.duration.kind === 'lapButton' || step.duration.kind === 'open')
+    const stepNotes = typeof step.notes === 'string' && step.notes.trim().length > 0
+      ? step.notes
+      : isRest && typeof step.label === 'string' && step.label.trim().length > 0
+        ? step.label
+        : ''
+
+    const durationType = isOpenRest ? 'open' : isDistance ? 'distance' : 'time'
+    const durationValue = isOpenRest
+      ? 0
+      : isDistance
+        ? Math.round(step.duration.value * distanceScale * 100)
+        : Math.round(step.duration.value * 1000)
 
     const targetValue = step.kind === 'swim' ? strokeToFitValue[step.stroke] ?? 0 : 0
 
@@ -652,6 +677,7 @@ export function buildWorkoutFit(workout) {
       mesgNum: Profile.MesgNum.WORKOUT_STEP,
       messageIndex: index,
       wktStepName: humanizeStep(step, index),
+      notes: stepNotes,
       durationType,
       durationValue,
       intensity: isRest ? 'rest' : step.intensity,
