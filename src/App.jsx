@@ -1,4 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react'
+// Vite raw import to read README.md at build time
+import readme from '../README.md?raw'
 import {
   buildWorkoutFit,
   defaultWorkoutJson,
@@ -11,6 +13,7 @@ import './App.css'
 function App() {
   const [draft, setDraft] = useState(defaultWorkoutJson)
   const [downloadState, setDownloadState] = useState('idle')
+  const [copyStatus, setCopyStatus] = useState('')
   // Simple IndexedDB key and helper to open the DB for persisting directory handles
   const idbKey = 'fitbuilder-handles'
 
@@ -188,6 +191,41 @@ function App() {
     }
   }
 
+  async function handleCopyAiInstructions() {
+    try {
+      setCopyStatus('locating')
+      // Match between the headers (case-sensitive) including newlines
+      const re = /Begin AI Instructions([\s\S]*?)End AI Instructions/;
+      const m = readme.match(re)
+      if (!m || !m[1]) {
+        setCopyStatus('not found')
+        return
+      }
+      const text = m[1].trim()
+      if (!navigator.clipboard) {
+        // Fallback: create textarea
+        const ta = document.createElement('textarea')
+        ta.value = text
+        ta.style.position = 'fixed'
+        ta.style.left = '-9999px'
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand('copy')
+        ta.remove()
+        setCopyStatus('copied')
+        return
+      }
+      await navigator.clipboard.writeText(text)
+      setCopyStatus('copied')
+    } catch (err) {
+      console.error('Copy failed', err)
+      setCopyStatus('failed')
+    } finally {
+      // Clear status after a short delay
+      setTimeout(() => setCopyStatus(''), 2500)
+    }
+  }
+
   return (
     <main className="app-shell">
       <section className="hero-panel">
@@ -195,9 +233,11 @@ function App() {
           <p className="eyebrow">Local-only FIT workout builder</p>
           <h1>Swim Workout Builder</h1>
           <p className="lede">
-            Paste strict JSON, validate it locally, and generate a Garmin workout file. Suggestion: Use ChatGPT to convert natural language
-            instructions to JSON. You can pick any only swim workout and paste the text from the workout instructions into you favorite AI client
-            and request conversion for use with the Garmin FIT library.
+            Paste strict JSON, validate it locally, and generate a Garmin workout file. First click the button labeled "Copy AI Instructions to Clipboard" at the bottom of the app.
+            Then paste that into you favorite AI client. I tested mostly with ChatGpt and CoPilot. Once you paste the instructions, put your swimworkout at the bottom.
+            You don't need any special formatting for the workout instructions but the better it is structured the better you outcome is likely to be. Once you chat session
+            has the instructions, continue to use that session for future workouts. Once the AI client generates the JSON, copy and paste here here. If you see errors on the 
+            right side of the screen, go back to the AI client and post the errors. The AI client should be able to address them and fix the JSON.
           </p>
           <div className="hero-notes">
             <span>React + JavaScript</span>
@@ -340,7 +380,13 @@ function App() {
           )}
         </div>
       </section>
-    </main>
+        <footer className="app-footer" style={{ padding: 16, borderTop: '1px solid #eee', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button type="button" className="ghost-button" onClick={handleCopyAiInstructions}>
+            Copy AI Instructions to Clipboard
+          </button>
+          <span style={{ color: '#666' }}>{copyStatus === 'locating' ? 'Locating...' : copyStatus === 'copied' ? 'Copied to clipboard' : copyStatus === 'not found' ? 'AI instructions not found' : copyStatus === 'failed' ? 'Copy failed' : ''}</span>
+        </footer>
+      </main>
   )
 }
 
