@@ -232,13 +232,15 @@ function App() {
         <div className="hero-copy">
           <p className="eyebrow">Local-only FIT workout builder</p>
           <h1>Swim Workout Builder</h1>
-          <p className="lede">
-            Paste strict JSON, validate it locally, and generate a Garmin workout file. First click the button labeled "Copy AI Instructions to Clipboard" at the bottom of the app.
-            Then paste that into you favorite AI client. I tested mostly with ChatGpt and CoPilot. Once you paste the instructions, put your swimworkout at the bottom.
-            You don't need any special formatting for the workout instructions but the better it is structured the better you outcome is likely to be. Once you chat session
-            has the instructions, continue to use that session for future workouts. Once the AI client generates the JSON, copy and paste here here. If you see errors on the 
-            right side of the screen, go back to the AI client and post the errors. The AI client should be able to address them and fix the JSON.
-          </p>
+          
+          <ol className="lede">
+            <li>Click the "Copy AI Instructions to Clipboard" button at the bottom of the app.</li>
+            <li>Paste the instructions into your favorite AI client. This feature has been tested primarily with ChatGPT and GitHub Copilot.</li>
+            <li>Below the pasted instructions, enter your swim workout. No special formatting is required, although a well-structured workout will usually produce better results.</li>
+            <li>Continue using the same AI chat session for future workouts. The instructions only need to be pasted once per conversation.</li>
+            <li>When the AI generates the JSON, copy and paste it into this application.</li>
+            <li>If validation errors appear on the right side of the screen, copy those errors back into the AI chat. The AI should be able to correct the JSON and regenerate it.</li>
+          </ol>
           <div className="hero-notes">
             <span>React + JavaScript</span>
             <span>Official Garmin FIT JS SDK</span>

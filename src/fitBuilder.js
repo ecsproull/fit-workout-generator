@@ -630,7 +630,10 @@ export function buildWorkoutFit(workout) {
   const fitPoolUnit = mapPoolLengthUnit(workout.poolLengthUnit)
   // Keep workout distances in authored units; converting yards caused 50y to display as 47y on device.
   const distanceScale = 1
-  const encodedPoolLength = workout.poolLength
+  const encodedPoolLength =
+  workout.poolLengthUnit === 'yards'
+    ? workout.poolLength * 0.9144
+    : workout.poolLength
 
   let messageIndex = 0
 
@@ -668,7 +671,7 @@ export function buildWorkoutFit(workout) {
     const durationValue = isOpenRest
       ? 0
       : isDistance
-        ? Math.round(step.duration.value * distanceScale * 100)
+        ? workout.poolLengthUnit === 'yards' ? Math.round(step.duration.value * distanceScale * 91.44) :  Math.round(step.duration.value * distanceScale * 100)
         : Math.round(step.duration.value * 1000)
 
     const targetValue = step.kind === 'swim' ? strokeToFitValue[step.stroke] ?? 0 : 0
