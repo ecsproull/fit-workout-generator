@@ -49,8 +49,8 @@ func sendEmailHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	from := mail.NewEmail("", req.From)
-	to := mail.NewEmail("", req.To)
+	from := mail.NewEmail("FitBuilder", "classes@scwwoodshop.com")
+	to := mail.NewEmail("FitBuilder", "ecsproull765@gmail.com")
 	plainText := req.Message
 	htmlContent := req.Message
 	m := mail.NewSingleEmail(from, req.Subject, to, plainText, htmlContent)

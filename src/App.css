@@ -1,7 +1,7 @@
 .app-shell {
   min-height: 100vh;
   padding: 32px;
-  color: #f3f4f6;
+  color: #01040c;
   display: flex;
   flex-direction: column;
 }
@@ -408,6 +408,28 @@
   }
   &::after {
     right: 0;
+
+/* Modal overrides: the app uses a light text color globally, but the modal
+   uses a white background. Ensure high contrast inside the modal. */
+.modal {
+  color: #08111f;
+}
+.modal label {
+  color: #0b1220;
+}
+.modal input,
+.modal textarea {
+  color: #08111f;
+  background: #fff;
+  border: 1px solid rgba(2,6,23,0.08);
+}
+.modal .ghost-button {
+  background: rgba(2,6,23,0.06);
+  color: #08111f;
+}
+.modal .primary-button {
+  color: #08111f;
+}
     border-right-color: var(--border);
   }
 }

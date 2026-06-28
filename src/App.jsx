@@ -14,6 +14,11 @@ function App() {
   const [draft, setDraft] = useState(defaultWorkoutJson)
   const [downloadState, setDownloadState] = useState('idle')
   const [copyStatus, setCopyStatus] = useState('')
+  const [showFeedback, setShowFeedback] = useState(false)
+  const [feedbackText, setFeedbackText] = useState('')
+  const [senderEmail, setSenderEmail] = useState('')
+  const [includeJson, setIncludeJson] = useState(false)
+  const [feedbackStatus, setFeedbackStatus] = useState('')
   // Simple IndexedDB key and helper to open the DB for persisting directory handles
   const idbKey = 'fitbuilder-handles'
 
@@ -226,6 +231,53 @@ function App() {
     }
   }
 
+  function getSendEmailUrl() {
+    const host = window.location.hostname
+    // Local development: use the local Go server (port 8081)
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return 'http://localhost:8081/send-email'
+    }
+    // Otherwise assume production proxying (same origin)
+    return '/send-email'
+  }
+
+  async function handleSendFeedback() {
+    if (!feedbackText || feedbackText.trim().length === 0) {
+      setFeedbackStatus('feedback required')
+      return
+    }
+    setFeedbackStatus('sending')
+    const apiUrl = getSendEmailUrl()
+
+    const to = 'support@fitbuilder.example' // CHANGE: replace with your real support address
+    const from = senderEmail && senderEmail.trim() !== '' ? senderEmail.trim() : 'noreply@fitbuilder.example'
+    const subject = 'FitBuilder Feedback'
+    let message = `<p>${feedbackText.trim()}</p>\n\n<p>From: ${from}</p>`
+    if (includeJson) {
+      message += `\n\n--- Workout JSON ---\n<pre style="font-family: Consolas, 'Courier New', monospace; font-size: 14px;">${draft}</pre>`
+    }
+
+    try {
+      const resp = await fetch(apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, from, subject, message }),
+      })
+      if (!resp.ok) throw new Error(`status ${resp.status}`)
+      setFeedbackStatus('sent')
+      setTimeout(() => {
+        setShowFeedback(false)
+        setFeedbackText('')
+        setSenderEmail('')
+        setIncludeJson(false)
+        setFeedbackStatus('')
+      }, 1200)
+    } catch (err) {
+      console.error('Send feedback failed', err)
+      setFeedbackStatus('failed')
+    }
+  }
+
   return (
     <main className="app-shell">
       <section className="hero-panel">
@@ -386,8 +438,52 @@ function App() {
           <button type="button" className="ghost-button" onClick={handleCopyAiInstructions}>
             Copy AI Instructions to Clipboard
           </button>
+          <button type="button" className="ghost-button" onClick={() => setShowFeedback(true)}>
+            Send Feedback
+          </button>
           <span style={{ color: '#666' }}>{copyStatus === 'locating' ? 'Locating...' : copyStatus === 'copied' ? 'Copied to clipboard' : copyStatus === 'not found' ? 'AI instructions not found' : copyStatus === 'failed' ? 'Copy failed' : ''}</span>
         </footer>
+        {showFeedback && (
+          <div className="modal-backdrop" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div className="modal" role="dialog" aria-modal="true" style={{ background: '#fff', padding: 20, width: 680, maxWidth: '95%', borderRadius: 8 }}>
+              <h3>Send Feedback</h3>
+              <div style={{ marginBottom: 8 }}>
+                <label style={{ display: 'block', fontWeight: 600 }}>Feedback (required)</label>
+                <textarea
+                  value={feedbackText}
+                  onChange={(e) => setFeedbackText(e.target.value)}
+                  placeholder={"If this is a bug report or feature request, please give as much detail as possible. For a bug please include the workout you were trying to generate and any special instructions you gave to you AI client. If this is a feature request tell me what you want to do and what you expect the output to be"}
+                  rows={6}
+                  style={{ width: '100%' }}
+                />
+              </div>
+              <div style={{ marginBottom: 8 }}>
+                <label style={{ display: 'block', fontWeight: 600 }}>Your email (optional)</label>
+                <input type="email" value={senderEmail} onChange={(e) => setSenderEmail(e.target.value)} style={{ width: '100%' }} />
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <input type="checkbox" checked={includeJson} onChange={(e) => setIncludeJson(e.target.checked)} />
+                  <span>Include current Workout JSON</span>
+                </label>
+              </div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+                <button type="button" className="primary-button" onClick={() => { setShowFeedback(false); setFeedbackStatus(''); }}>
+                  Cancel
+                </button>
+                <button type="button" className="primary-button" onClick={handleSendFeedback}>
+                  Send
+                </button>
+              </div>
+              <div style={{ marginTop: 8, color: '#666' }}>
+                {feedbackStatus === 'sending' && 'Sending...'}
+                {feedbackStatus === 'sent' && 'Feedback sent — thanks!'}
+                {feedbackStatus === 'failed' && 'Failed to send feedback.'}
+                {feedbackStatus === 'feedback required' && 'Please enter feedback text.'}
+              </div>
+            </div>
+          </div>
+        )}
       </main>
   )
 }
