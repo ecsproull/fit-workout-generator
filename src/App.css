@@ -1,7 +1,7 @@
 .app-shell {
   min-height: 100vh;
   padding: 32px;
-  color: #01040c;
+  color: #f3f4f6;
   display: flex;
   flex-direction: column;
 }
